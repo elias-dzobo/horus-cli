@@ -1,0 +1,11 @@
+name: goal_contact
+base_url: ../examples/auth-app.html
+goal: "Sign into the application and then navigate to the contact page and fill the contact form."
+success_text: "Message sent"
+max_steps: 10
+
+inputs:
+  email: "qa-user@example.com"
+  password: "correct-horse-battery"
+  name: "QA User"
+  message: "I am testing the contact form with Horus."

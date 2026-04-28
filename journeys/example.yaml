@@ -1,0 +1,6 @@
+name: example_homepage
+base_url: ../examples/static-app.html
+
+steps:
+  - goto: ""
+  - expect_text: "Welcome"

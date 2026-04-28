@@ -1,0 +1,7 @@
+name: static_example
+base_url: ../examples/static-app.html
+
+steps:
+  - goto: ""
+  - expect_text: "Welcome"
+  - expect_text: "Extraction complete"

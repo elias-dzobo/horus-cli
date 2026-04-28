@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Horus Auth Example</title>
+    <style>
+      body {
+        color: #172033;
+        font-family: Arial, sans-serif;
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: #f4f7fb;
+      }
+
+      main {
+        background: #ffffff;
+        border: 1px solid #d9e2ef;
+        border-radius: 8px;
+        padding: 28px;
+        width: min(420px, calc(100vw - 32px));
+      }
+
+      h1 {
+        font-size: 24px;
+        margin: 0 0 20px;
+      }
+
+      form {
+        display: grid;
+        gap: 14px;
+      }
+
+      label {
+        display: grid;
+        gap: 6px;
+        font-size: 14px;
+      }
+
+      input {
+        border: 1px solid #bdc9d8;
+        border-radius: 6px;
+        font-size: 16px;
+        padding: 10px 12px;
+      }
+
+      button {
+        background: #116466;
+        border: 0;
+        border-radius: 6px;
+        color: #ffffff;
+        cursor: pointer;
+        font-size: 15px;
+        padding: 11px 14px;
+      }
+
+      .secondary {
+        background: #40566f;
+      }
+
+      .link {
+        background: transparent;
+        color: #116466;
+        padding: 0;
+        text-align: left;
+      }
+
+      .hidden {
+        display: none;
+      }
+
+      .status {
+        color: #6b2630;
+        min-height: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section id="signup-view">
+        <h1>Create account</h1>
+        <form id="signup-form">
+          <label>
+            Email
+            <input name="signup_email" type="email" autocomplete="email" required>
+          </label>
+          <label>
+            Password
+            <input name="signup_password" type="password" autocomplete="new-password" required>
+          </label>
+          <button type="submit" data-testid="create-account">Create account</button>
+          <button class="link" type="button" data-testid="go-to-signin">Already have an account?</button>
+        </form>
+      </section>
+
+      <section class="hidden" id="signin-view">
+        <h1>Sign in</h1>
+        <form id="signin-form">
+          <label>
+            Email
+            <input name="signin_email" type="email" autocomplete="email" required>
+          </label>
+          <label>
+            Password
+            <input name="signin_password" type="password" autocomplete="current-password" required>
+          </label>
+          <button type="submit" data-testid="sign-in">Sign in</button>
+          <p class="status" data-testid="signin-status"></p>
+        </form>
+      </section>
+
+      <section class="hidden" id="dashboard-view">
+        <h1>Dashboard</h1>
+        <p data-testid="welcome-message"></p>
+        <button type="button" data-testid="contact-nav">Contact</button>
+        <button class="secondary" type="button" data-testid="sign-out">Sign out</button>
+      </section>
+
+      <section class="hidden" id="contact-view">
+        <h1>Contact</h1>
+        <form id="contact-form">
+          <label>
+            Name
+            <input name="contact_name" autocomplete="name" required>
+          </label>
+          <label>
+            Email
+            <input name="contact_email" type="email" autocomplete="email" required>
+          </label>
+          <label>
+            Message
+            <input name="contact_message" required>
+          </label>
+          <button type="submit" data-testid="send-contact">Send message</button>
+          <p class="status" data-testid="contact-status"></p>
+        </form>
+      </section>
+    </main>
+
+    <script>
+      const signupView = document.querySelector("#signup-view");
+      const signinView = document.querySelector("#signin-view");
+      const dashboardView = document.querySelector("#dashboard-view");
+      const contactView = document.querySelector("#contact-view");
+      const welcomeMessage = document.querySelector("[data-testid=welcome-message]");
+      const signinStatus = document.querySelector("[data-testid=signin-status]");
+      const contactStatus = document.querySelector("[data-testid=contact-status]");
+
+      if (!localStorage.getItem("auth-example-user")) {
+        localStorage.setItem("auth-example-user", JSON.stringify({
+          email: "qa-user@example.com",
+          password: "correct-horse-battery"
+        }));
+      }
+
+      function show(view) {
+        signupView.classList.toggle("hidden", view !== "signup");
+        signinView.classList.toggle("hidden", view !== "signin");
+        dashboardView.classList.toggle("hidden", view !== "dashboard");
+        contactView.classList.toggle("hidden", view !== "contact");
+      }
+
+      function showDashboard(email) {
+        welcomeMessage.textContent = `Signed in as ${email}`;
+        show("dashboard");
+      }
+
+      document.querySelector("#signup-form").addEventListener("submit", (event) => {
+        event.preventDefault();
+        const email = event.currentTarget.elements.signup_email.value;
+        const password = event.currentTarget.elements.signup_password.value;
+        localStorage.setItem("auth-example-user", JSON.stringify({ email, password }));
+        showDashboard(email);
+      });
+
+      document.querySelector("[data-testid=go-to-signin]").addEventListener("click", () => {
+        show("signin");
+      });
+
+      document.querySelector("[data-testid=sign-out]").addEventListener("click", () => {
+        signinStatus.textContent = "";
+        show("signin");
+      });
+
+      document.querySelector("[data-testid=contact-nav]").addEventListener("click", () => {
+        contactStatus.textContent = "";
+        show("contact");
+      });
+
+      document.querySelector("#contact-form").addEventListener("submit", (event) => {
+        event.preventDefault();
+        contactStatus.textContent = "Message sent";
+      });
+
+      document.querySelector("#signin-form").addEventListener("submit", (event) => {
+        event.preventDefault();
+        const savedUser = JSON.parse(localStorage.getItem("auth-example-user") || "null");
+        const email = event.currentTarget.elements.signin_email.value;
+        const password = event.currentTarget.elements.signin_password.value;
+
+        if (savedUser && savedUser.email === email && savedUser.password === password) {
+          showDashboard(email);
+          return;
+        }
+
+        signinStatus.textContent = "Invalid email or password";
+      });
+
+      show("signup");
+    </script>
+  </body>
+</html>

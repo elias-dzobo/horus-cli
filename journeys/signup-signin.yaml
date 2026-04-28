@@ -1,0 +1,24 @@
+name: signup_then_signin
+base_url: ../examples/auth-app.html
+
+steps:
+  - goto: ""
+  - expect_text: "Create account"
+  - fill:
+      selector: "[name=signup_email]"
+      value: "qa-user@example.com"
+  - fill:
+      selector: "[name=signup_password]"
+      value: "correct-horse-battery"
+  - click: "[data-testid=create-account]"
+  - expect_text: "Signed in as qa-user@example.com"
+  - click: "[data-testid=sign-out]"
+  - expect_text: "Sign in"
+  - fill:
+      selector: "[name=signin_email]"
+      value: "qa-user@example.com"
+  - fill:
+      selector: "[name=signin_password]"
+      value: "correct-horse-battery"
+  - click: "[data-testid=sign-in]"
+  - expect_text: "Signed in as qa-user@example.com"

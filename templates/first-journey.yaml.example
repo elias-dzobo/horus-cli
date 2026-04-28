@@ -1,0 +1,8 @@
+name: first_journey
+base_url: http://localhost:3000
+goal: "Sign in and verify the dashboard loads."
+success_text: "Dashboard"
+
+inputs:
+  email: "{{env.TEST_EMAIL}}"
+  password: "{{env.TEST_PASSWORD}}"

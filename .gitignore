@@ -1,0 +1,9 @@
+node_modules/
+artifacts/
+dist/
+.env
+.env.*
+!.env.example
+.DS_Store
+*.tgz
+npm-debug.log*
