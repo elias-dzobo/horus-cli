@@ -1,5 +1,5 @@
 {
-  "name": "@horus/cli",
+  "name": "@nonfungibledev/horus-cli",
   "version": "0.1.0",
   "description": "Journey-based QA runner that captures browser evidence and writes incident reports.",
   "type": "module",
@@ -16,7 +16,7 @@
     "agentic-testing"
   ],
   "bin": {
-    "horus": "./src/cli.js"
+    "horus": "src/cli.js"
   },
   "files": [
     "src",
@@ -43,5 +43,13 @@
   "devDependencies": {
     "@types/node": "^20.11.30",
     "typescript": "^5.4.5"
+  },
+  "homepage": "https://github.com/elias-dzobo/horus-cli#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/elias-dzobo/horus-cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/elias-dzobo/horus-cli/issues"
   }
 }

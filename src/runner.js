@@ -6,7 +6,7 @@ import { stepLabel } from "./step-label.js";
 
 /**
  * @param {import("./types.js").Journey} journey
- * @param {{ artifactsRoot?: string, headed?: boolean }} options
+ * @param {{ artifactsRoot?: string, headed?: boolean, project?: { name: string, id?: string }, environment?: { name: string, base_url?: string } }} options
  * @returns {Promise<import("./types.js").RunResult>}
  */
 export async function runJourney(journey, options = {}) {
@@ -120,7 +120,10 @@ export async function runJourney(journey, options = {}) {
   }
 
   return {
+    schema_version: "horus.run.v1",
     run_id: runId,
+    project: options.project ?? { name: "unknown" },
+    environment: options.environment ?? { name: "local" },
     artifacts_dir: artifactsDir,
     journey,
     steps: stepRecords,

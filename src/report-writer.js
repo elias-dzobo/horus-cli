@@ -7,6 +7,11 @@ import path from "node:path";
  */
 export async function writeReports(result, incident) {
   await fs.writeFile(
+    path.join(result.artifacts_dir, "run.json"),
+    `${JSON.stringify(createRunManifest(result, incident), null, 2)}\n`
+  );
+
+  await fs.writeFile(
     path.join(result.artifacts_dir, "report.json"),
     `${JSON.stringify(incident, null, 2)}\n`
   );
@@ -42,6 +47,53 @@ export async function writeReports(result, incident) {
  * @param {import("./types.js").RunResult} result
  * @param {any} incident
  */
+function createRunManifest(result, incident) {
+  return {
+    schema_version: "horus.run.v1",
+    id: result.run_id,
+    status: result.passed ? "passed" : "failed",
+    project: result.project,
+    environment: result.environment,
+    journey: {
+      name: result.journey.name,
+      source_path: result.journey.source_path ?? null,
+      base_url: result.journey.base_url
+    },
+    artifacts: {
+      dir: result.artifacts_dir,
+      report_json: path.join(result.artifacts_dir, "report.json"),
+      repair_context_json: path.join(result.artifacts_dir, "repair-context.json"),
+      report_md: path.join(result.artifacts_dir, "report.md"),
+      step_history_json: path.join(result.artifacts_dir, "step-history.json"),
+      console_json: path.join(result.artifacts_dir, "console.json"),
+      network_json: path.join(result.artifacts_dir, "network.json"),
+      dom_snapshot: result.dom_snapshot ?? null
+    },
+    summary: {
+      passed: result.passed,
+      final_url: result.final_url,
+      failed_step: incident.step_failed,
+      failure_type: incident.failure_type,
+      severity: incident.severity,
+      confidence: incident.confidence
+    },
+    counts: {
+      steps: result.steps.length,
+      console_errors: incident.browser_signal.console_errors.length,
+      network_failures: incident.browser_signal.network_failures.length
+    },
+    repro: result.repro,
+    correlation: result.correlation,
+    cloud: incident.cloud ?? null,
+    created_at: result.steps[0]?.started_at ?? new Date().toISOString(),
+    finished_at: result.steps.at(-1)?.finished_at ?? new Date().toISOString()
+  };
+}
+
+/**
+ * @param {import("./types.js").RunResult} result
+ * @param {any} incident
+ */
 function createRepairContext(result, incident) {
   return {
     schema_version: "horus.repair_context.v1",
@@ -50,7 +102,9 @@ function createRepairContext(result, incident) {
       id: result.run_id,
       passed: result.passed,
       final_url: result.final_url,
-      artifacts_dir: result.artifacts_dir
+      artifacts_dir: result.artifacts_dir,
+      project: result.project,
+      environment: result.environment
     },
     journey: {
       name: result.journey.name,

@@ -96,7 +96,11 @@ async function observe(page) {
         name: element.getAttribute("name") || null,
         text: element.textContent?.trim() || null,
         placeholder: element.getAttribute("placeholder") || null,
-        value: element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement ? element.value : null
+        value: element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement || element instanceof HTMLSelectElement ? element.value : null,
+        checked: element instanceof HTMLInputElement && (element.type === "checkbox" || element.type === "radio") ? element.checked : null,
+        options: element instanceof HTMLSelectElement
+          ? Array.from(element.options).map((option) => ({ value: option.value, text: option.textContent?.trim() || option.value }))
+          : null
       }));
 
     const visibleText = document.body.innerText
@@ -134,7 +138,8 @@ async function planWithOpenAI(goal, observation, inputs, history) {
           "You are a browser test planner for Horus.",
           "Choose exactly one next action to advance the user's goal.",
           "Use only selectors that appear in the observation elements.",
-          "Fill fields with values from the provided inputs.",
+          "Fill or select fields with values from the provided inputs.",
+          "Use check for checkboxes, press for keyboard keys, wait for short UI delays, and scroll when visible content must move.",
           "Return complete only when the visible page state proves the goal is done.",
           "For contact forms, do not return complete immediately after filling fields; click the send or submit button first.",
           "Return fail if the goal cannot be advanced from the current observation."
@@ -160,7 +165,7 @@ async function planWithOpenAI(goal, observation, inputs, history) {
           additionalProperties: false,
           required: ["action", "selector", "value", "reason"],
           properties: {
-            action: { type: "string", enum: ["click", "fill", "complete", "fail"] },
+            action: { type: "string", enum: ["click", "fill", "select", "check", "press", "wait", "scroll", "complete", "fail"] },
             selector: { type: ["string", "null"] },
             value: { type: ["string", "null"] },
             reason: { type: "string" }
@@ -219,6 +224,36 @@ async function act(page, action) {
     return;
   }
 
+  if (action.action === "select") {
+    if (!action.selector || action.value === null) throw new Error("Select action requires a selector and value.");
+    await page.locator(action.selector).selectOption(action.value);
+    return;
+  }
+
+  if (action.action === "check") {
+    if (!action.selector) throw new Error("Check action requires a selector.");
+    await page.locator(action.selector).check();
+    return;
+  }
+
+  if (action.action === "press") {
+    if (!action.selector || action.value === null) throw new Error("Press action requires a selector and key value.");
+    await page.locator(action.selector).press(action.value);
+    return;
+  }
+
+  if (action.action === "wait") {
+    const duration = action.value ? Number.parseInt(action.value, 10) : 500;
+    await page.waitForTimeout(Number.isFinite(duration) ? Math.min(Math.max(duration, 100), 5_000) : 500);
+    return;
+  }
+
+  if (action.action === "scroll") {
+    const direction = action.value === "up" ? -1 : 1;
+    await page.mouse.wheel(0, direction * 700);
+    return;
+  }
+
   throw new Error(`Unsupported executable agent action: ${action.action}`);
 }
 
@@ -234,24 +269,26 @@ function validateAction(raw, observation) {
 
   const action = /** @type {Partial<AgentAction>} */ (raw);
   const actionType = action.action;
-  if (!["click", "fill", "complete", "fail"].includes(String(actionType))) {
+  if (!["click", "fill", "select", "check", "press", "wait", "scroll", "complete", "fail"].includes(String(actionType))) {
     throw new Error(`Planner returned unsupported action: ${String(action.action)}`);
   }
 
-  if ((actionType === "click" || actionType === "fill") && typeof action.selector !== "string") {
+  const selectorActions = ["click", "fill", "select", "check", "press"];
+  if (selectorActions.includes(String(actionType)) && typeof action.selector !== "string") {
     throw new Error(`Planner returned ${action.action} without a selector.`);
   }
 
-  if (actionType === "fill" && typeof action.value !== "string") {
-    throw new Error("Planner returned fill without a string value.");
+  const valueActions = ["fill", "select", "press"];
+  if (valueActions.includes(String(actionType)) && typeof action.value !== "string") {
+    throw new Error(`Planner returned ${action.action} without a string value.`);
   }
 
-  if ((actionType === "click" || actionType === "fill") && !observation.elements.some((element) => element.selector === action.selector)) {
+  if (selectorActions.includes(String(actionType)) && !observation.elements.some((element) => element.selector === action.selector)) {
     throw new Error(`Planner selected a selector that was not observed: ${action.selector}`);
   }
 
   return {
-    action: /** @type {"click" | "fill" | "complete" | "fail"} */ (actionType),
+    action: /** @type {"click" | "fill" | "select" | "check" | "press" | "wait" | "scroll" | "complete" | "fail"} */ (actionType),
     selector: action.selector ?? null,
     value: action.value ?? null,
     reason: typeof action.reason === "string" ? action.reason : "No reason provided."
@@ -332,6 +369,11 @@ function firstJsonObject(text) {
  */
 function formatAction(action) {
   if (action.action === "fill") return `fill ${action.selector}: ${action.reason}`;
+  if (action.action === "select") return `select ${action.selector}: ${action.reason}`;
+  if (action.action === "check") return `check ${action.selector}: ${action.reason}`;
+  if (action.action === "press") return `press ${action.selector} ${action.value}: ${action.reason}`;
+  if (action.action === "wait") return `wait ${action.value ?? "500"}ms: ${action.reason}`;
+  if (action.action === "scroll") return `scroll ${action.value ?? "down"}: ${action.reason}`;
   if (action.action === "click") return `click ${action.selector}: ${action.reason}`;
   return `${action.action}: ${action.reason}`;
 }
@@ -370,7 +412,7 @@ function agentError(message, actions) {
 
 /**
  * @typedef {Object} AgentAction
- * @property {"click" | "fill" | "complete" | "fail"} action
+ * @property {"click" | "fill" | "select" | "check" | "press" | "wait" | "scroll" | "complete" | "fail"} action
  * @property {string | null} selector
  * @property {string | null} value
  * @property {string} reason

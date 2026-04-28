@@ -68,6 +68,9 @@
 /**
  * @typedef {Object} RunResult
  * @property {string} run_id
+ * @property {string} schema_version
+ * @property {{ name: string, id?: string }} project
+ * @property {{ name: string, base_url?: string }} environment
  * @property {string} artifacts_dir
  * @property {Journey} journey
  * @property {StepRecord[]} steps

@@ -10,11 +10,13 @@ import YAML from "yaml";
 export async function loadJourney(filePath) {
   const raw = await fs.readFile(filePath, "utf8");
   const extension = path.extname(filePath).toLowerCase();
-  const parsed = extension === ".json" ? JSON.parse(raw) : YAML.parse(raw);
+  const parsedRaw = resolveEnvPlaceholders(extension === ".json" ? JSON.parse(raw) : YAML.parse(raw));
 
-  if (!parsed || typeof parsed !== "object") {
+  if (!parsedRaw || typeof parsedRaw !== "object" || Array.isArray(parsedRaw)) {
     throw new Error("Journey file must contain an object.");
   }
+
+  const parsed = /** @type {Record<string, unknown>} */ (parsedRaw);
 
   if (typeof parsed.name !== "string" || parsed.name.length === 0) {
     throw new Error("Journey requires a non-empty name.");
@@ -28,10 +30,33 @@ export async function loadJourney(filePath) {
 
   return {
     ...parsed,
+    name: parsed.name,
     base_url: normalizeBaseUrl(parsed.base_url, filePath),
     steps,
     source_path: path.resolve(filePath)
   };
+}
+
+/**
+ * @param {unknown} value
+ * @returns {unknown}
+ */
+function resolveEnvPlaceholders(value) {
+  if (typeof value === "string") {
+    return value.replace(/\{\{env\.([A-Z0-9_]+)\}\}/gi, (_match, name) => process.env[String(name)] ?? "");
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => resolveEnvPlaceholders(item));
+  }
+
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, nested]) => [key, resolveEnvPlaceholders(nested)])
+    );
+  }
+
+  return value;
 }
 
 /**

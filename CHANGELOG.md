@@ -10,3 +10,9 @@ Initial local-first CLI release.
 - Write human-readable and structured run reports.
 - Emit `repair-context.json` as the v1 handoff contract for future repair agents.
 - Reserve cloud dashboard config fields while keeping v1 local-only.
+- Provide guided `horus init` output and a commented starter journey template.
+- Resolve `{{env.NAME}}` placeholders from the shell or `.env` file at runtime.
+- Add `run.json` as the canonical local run manifest.
+- Add project and environment metadata to local runs.
+- Add `horus doctor`, `horus runs list`, `horus runs show`, and `horus upload`.
+- Expand browser-agent actions beyond click/fill to select, check, press, wait, and scroll.
