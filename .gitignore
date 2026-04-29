@@ -7,3 +7,4 @@ dist/
 .DS_Store
 *.tgz
 npm-debug.log*
+docs/

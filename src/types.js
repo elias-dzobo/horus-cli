@@ -59,6 +59,10 @@
  * @typedef {Object} NetworkSignal
  * @property {string} url
  * @property {string} method
+ * @property {string=} resource_type
+ * @property {"app" | "third_party" | "asset" | "noise"} category
+ * @property {boolean} app_relevant
+ * @property {boolean} ignored
  * @property {number=} status
  * @property {string=} status_text
  * @property {string=} failure
@@ -68,6 +72,9 @@
 /**
  * @typedef {Object} RunResult
  * @property {string} run_id
+ * @property {string} schema_version
+ * @property {{ name: string, id?: string }} project
+ * @property {{ name: string, base_url?: string }} environment
  * @property {string} artifacts_dir
  * @property {Journey} journey
  * @property {StepRecord[]} steps

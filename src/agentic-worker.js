@@ -18,8 +18,16 @@ export async function runAgentTask(page, task) {
 
   for (let index = 0; index < maxSteps; index += 1) {
     const observation = await observe(page);
+    const completion = process.env.OPENAI_API_KEY
+      ? await evaluateGoalWithOpenAI(task.goal, observation, actions)
+      : await evaluateGoalWithRules(page, task.goal, observation);
+    if (completion.satisfied) {
+      actions.push(`complete: ${completion.reason}`);
+      return actions;
+    }
+
     const action = process.env.OPENAI_API_KEY
-      ? await planWithOpenAI(task.goal, observation, inputs, actions)
+      ? await planWithOpenAI(page, task.goal, observation, inputs, actions)
       : planWithRules(task.goal, observation);
 
     if (action.action === "complete") {
@@ -35,8 +43,12 @@ export async function runAgentTask(page, task) {
     await act(page, action);
     await page.waitForTimeout(150);
 
-    if (await goalIsSatisfied(page, task.goal)) {
-      actions.push("complete: The visible page state satisfies the goal.");
+    const postActionObservation = await observe(page);
+    const postActionCompletion = process.env.OPENAI_API_KEY
+      ? await evaluateGoalWithOpenAI(task.goal, postActionObservation, actions)
+      : await evaluateGoalWithRules(page, task.goal, postActionObservation);
+    if (postActionCompletion.satisfied) {
+      actions.push(`complete: ${postActionCompletion.reason}`);
       return actions;
     }
   }
@@ -47,14 +59,31 @@ export async function runAgentTask(page, task) {
 /**
  * @param {import("playwright").Page} page
  * @param {string} goal
+ * @param {Awaited<ReturnType<typeof observe>>} observation
  */
-async function goalIsSatisfied(page, goal) {
+async function evaluateGoalWithRules(page, goal, observation) {
   const normalizedGoal = goal.toLowerCase();
   if (normalizedGoal.includes("contact")) {
-    return page.getByText("Message sent").first().isVisible().catch(() => false);
+    const satisfied = await page.getByText("Message sent").first().isVisible().catch(() => false);
+    return {
+      satisfied,
+      reason: satisfied ? "The contact form reports that the message was sent." : "The visible page state does not yet satisfy the goal."
+    };
   }
 
-  return false;
+  if (normalizedGoal.includes("archive")) {
+    const text = observation.visibleText.join("\n").toLowerCase();
+    const satisfied = text.includes("archive") && (text.includes("prior research") || text.includes("saved runs"));
+    return {
+      satisfied,
+      reason: satisfied ? "The archive page is visible." : "The archive page is not visible yet."
+    };
+  }
+
+  return {
+    satisfied: false,
+    reason: "The visible page state does not yet satisfy the goal."
+  };
 }
 
 /**
@@ -69,35 +98,69 @@ async function observe(page) {
       return style.visibility !== "hidden" && style.display !== "none" && rect.width > 0 && rect.height > 0;
     };
 
+    /** @param {string} value */
+    const quote = (value) => `"${CSS.escape(value)}"`;
+
+    /** @param {string} value */
+    const textQuote = (value) => `"${value.replaceAll("\\", "\\\\").replaceAll("\"", "\\\"")}"`;
+
     /** @param {Element} element */
-    const selectorFor = (element) => {
+    const regionFor = (element) => {
+      if (element.closest("nav")) return "nav";
+      if (element.closest("header")) return "header";
+      if (element.closest("main")) return "main";
+      if (element.closest("form")) return "form";
+      return "page";
+    };
+
+    /** @param {Element} element */
+    const selectorsFor = (element) => {
       const testId = element.getAttribute("data-testid");
-      if (testId) return `[data-testid="${CSS.escape(testId)}"]`;
-
       const name = element.getAttribute("name");
-      if (name) return `[name="${CSS.escape(name)}"]`;
-
       const id = element.getAttribute("id");
-      if (id) return `#${CSS.escape(id)}`;
-
+      const ariaLabel = element.getAttribute("aria-label");
+      const placeholder = element.getAttribute("placeholder");
       const tag = element.tagName.toLowerCase();
       const text = element.textContent?.trim();
-      if (tag === "button" && text) return `text=${text}`;
+      const region = regionFor(element);
+      const selectors = [];
 
-      return tag;
+      if (testId) selectors.push(`[data-testid=${quote(testId)}]`);
+      if (ariaLabel) selectors.push(`${tag}[aria-label=${quote(ariaLabel)}]`);
+      if (name) selectors.push(`[name=${quote(name)}]`);
+      if (id) selectors.push(`#${CSS.escape(id)}`);
+      if (placeholder && (tag === "input" || tag === "textarea")) selectors.push(`${tag}[placeholder=${quote(placeholder)}]`);
+      if (text && (tag === "button" || tag === "a")) {
+        selectors.push(`${tag}:has-text(${textQuote(text)})`);
+        if (region === "nav") selectors.push(`nav ${tag}:has-text(${textQuote(text)})`);
+        if (region === "header") selectors.push(`header ${tag}:has-text(${textQuote(text)})`);
+      }
+
+      selectors.push(tag);
+      return Array.from(new Set(selectors));
     };
 
     const elements = Array.from(document.querySelectorAll("button, a, input, textarea, select"))
       .filter((element) => visible(element))
-      .map((element) => ({
-        selector: selectorFor(element),
+      .map((element) => {
+        const selectors = selectorsFor(element);
+        return {
+        selector: selectors[0],
+        selectors,
+        region: regionFor(element),
         tag: element.tagName.toLowerCase(),
         type: element.getAttribute("type") || null,
         name: element.getAttribute("name") || null,
+        ariaLabel: element.getAttribute("aria-label") || null,
         text: element.textContent?.trim() || null,
         placeholder: element.getAttribute("placeholder") || null,
-        value: element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement ? element.value : null
-      }));
+        value: element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement || element instanceof HTMLSelectElement ? element.value : null,
+        checked: element instanceof HTMLInputElement && (element.type === "checkbox" || element.type === "radio") ? element.checked : null,
+        options: element instanceof HTMLSelectElement
+          ? Array.from(element.options).map((option) => ({ value: option.value, text: option.textContent?.trim() || option.value }))
+          : null
+      };
+      });
 
     const visibleText = document.body.innerText
       .split("\n")
@@ -115,13 +178,14 @@ async function observe(page) {
 }
 
 /**
+ * @param {import("playwright").Page} page
  * @param {string} goal
  * @param {Awaited<ReturnType<typeof observe>>} observation
  * @param {ReturnType<typeof normalizeInputs>} inputs
  * @param {string[]} history
  * @returns {Promise<AgentAction>}
  */
-async function planWithOpenAI(goal, observation, inputs, history) {
+async function planWithOpenAI(page, goal, observation, inputs, history) {
   const client = new OpenAI();
   const model = process.env.HORUS_OPENAI_MODEL || DEFAULT_MODEL;
 
@@ -133,8 +197,11 @@ async function planWithOpenAI(goal, observation, inputs, history) {
         content: [
           "You are a browser test planner for Horus.",
           "Choose exactly one next action to advance the user's goal.",
-          "Use only selectors that appear in the observation elements.",
-          "Fill fields with values from the provided inputs.",
+          "Use selector values from an element's selectors array whenever possible.",
+          "Prefer semantic, contextual selectors such as nav button:has-text(\"Archive\") over broad text selectors.",
+          "If a label appears in more than one place, choose the selector that matches the user's intent and page region.",
+          "Fill or select fields with values from the provided inputs.",
+          "Use check for checkboxes, press for keyboard keys, wait for short UI delays, and scroll when visible content must move.",
           "Return complete only when the visible page state proves the goal is done.",
           "For contact forms, do not return complete immediately after filling fields; click the send or submit button first.",
           "Return fail if the goal cannot be advanced from the current observation."
@@ -160,7 +227,7 @@ async function planWithOpenAI(goal, observation, inputs, history) {
           additionalProperties: false,
           required: ["action", "selector", "value", "reason"],
           properties: {
-            action: { type: "string", enum: ["click", "fill", "complete", "fail"] },
+            action: { type: "string", enum: ["click", "fill", "select", "check", "press", "wait", "scroll", "complete", "fail"] },
             selector: { type: ["string", "null"] },
             value: { type: ["string", "null"] },
             reason: { type: "string" }
@@ -170,7 +237,67 @@ async function planWithOpenAI(goal, observation, inputs, history) {
     }
   });
 
-  return validateAction(parsePlannerOutput(extractOutputText(response)), observation);
+  return validateAction(page, parsePlannerOutput(extractOutputText(response)), observation);
+}
+
+/**
+ * @param {string} goal
+ * @param {Awaited<ReturnType<typeof observe>>} observation
+ * @param {string[]} history
+ * @returns {Promise<{ satisfied: boolean, reason: string }>}
+ */
+async function evaluateGoalWithOpenAI(goal, observation, history) {
+  const client = new OpenAI();
+  const model = process.env.HORUS_OPENAI_MODEL || DEFAULT_MODEL;
+
+  const response = await client.responses.create({
+    model,
+    input: [
+      {
+        role: "system",
+        content: [
+          "You are a browser QA goal evaluator for Horus.",
+          "Decide whether the visible page state already satisfies the user's goal.",
+          "Use visible text, URL, title, and observed elements as evidence.",
+          "If the requested page or success state is already visible, return satisfied true.",
+          "Do not require another click just because a matching nav button is still visible."
+        ].join(" ")
+      },
+      {
+        role: "user",
+        content: JSON.stringify({ goal, history, observation })
+      }
+    ],
+    text: {
+      format: {
+        type: "json_schema",
+        name: "horus_goal_evaluation",
+        strict: true,
+        schema: {
+          type: "object",
+          additionalProperties: false,
+          required: ["satisfied", "confidence", "reason"],
+          properties: {
+            satisfied: { type: "boolean" },
+            confidence: { type: "number" },
+            reason: { type: "string" }
+          }
+        }
+      }
+    }
+  });
+
+  const parsed = parsePlannerOutput(extractOutputText(response));
+  if (!parsed || typeof parsed !== "object") {
+    return { satisfied: false, reason: "Goal evaluator returned an invalid result." };
+  }
+
+  const result = /** @type {{ satisfied?: unknown, confidence?: unknown, reason?: unknown }} */ (parsed);
+  const confidence = typeof result.confidence === "number" ? result.confidence : 0;
+  return {
+    satisfied: result.satisfied === true && confidence >= 0.7,
+    reason: typeof result.reason === "string" ? result.reason : "Visible page state evaluated."
+  };
 }
 
 /**
@@ -219,43 +346,149 @@ async function act(page, action) {
     return;
   }
 
+  if (action.action === "select") {
+    if (!action.selector || action.value === null) throw new Error("Select action requires a selector and value.");
+    await page.locator(action.selector).selectOption(action.value);
+    return;
+  }
+
+  if (action.action === "check") {
+    if (!action.selector) throw new Error("Check action requires a selector.");
+    await page.locator(action.selector).check();
+    return;
+  }
+
+  if (action.action === "press") {
+    if (!action.selector || action.value === null) throw new Error("Press action requires a selector and key value.");
+    await page.locator(action.selector).press(action.value);
+    return;
+  }
+
+  if (action.action === "wait") {
+    const duration = action.value ? Number.parseInt(action.value, 10) : 500;
+    await page.waitForTimeout(Number.isFinite(duration) ? Math.min(Math.max(duration, 100), 5_000) : 500);
+    return;
+  }
+
+  if (action.action === "scroll") {
+    const direction = action.value === "up" ? -1 : 1;
+    await page.mouse.wheel(0, direction * 700);
+    return;
+  }
+
   throw new Error(`Unsupported executable agent action: ${action.action}`);
 }
 
 /**
+ * @param {import("playwright").Page} page
  * @param {unknown} raw
  * @param {Awaited<ReturnType<typeof observe>>} observation
- * @returns {AgentAction}
+ * @returns {Promise<AgentAction>}
  */
-function validateAction(raw, observation) {
+async function validateAction(page, raw, observation) {
   if (!raw || typeof raw !== "object") {
     throw new Error("Planner returned a non-object action.");
   }
 
   const action = /** @type {Partial<AgentAction>} */ (raw);
   const actionType = action.action;
-  if (!["click", "fill", "complete", "fail"].includes(String(actionType))) {
+  if (!["click", "fill", "select", "check", "press", "wait", "scroll", "complete", "fail"].includes(String(actionType))) {
     throw new Error(`Planner returned unsupported action: ${String(action.action)}`);
   }
 
-  if ((actionType === "click" || actionType === "fill") && typeof action.selector !== "string") {
+  const selectorActions = ["click", "fill", "select", "check", "press"];
+  if (selectorActions.includes(String(actionType)) && typeof action.selector !== "string") {
     throw new Error(`Planner returned ${action.action} without a selector.`);
   }
 
-  if (actionType === "fill" && typeof action.value !== "string") {
-    throw new Error("Planner returned fill without a string value.");
+  const valueActions = ["fill", "select", "press"];
+  if (valueActions.includes(String(actionType)) && typeof action.value !== "string") {
+    throw new Error(`Planner returned ${action.action} without a string value.`);
   }
 
-  if ((actionType === "click" || actionType === "fill") && !observation.elements.some((element) => element.selector === action.selector)) {
-    throw new Error(`Planner selected a selector that was not observed: ${action.selector}`);
+  let selector = action.selector ?? null;
+  if (selectorActions.includes(String(actionType)) && selector) {
+    const observedSelectors = new Set(observation.elements.flatMap((element) => [element.selector, ...(element.selectors ?? [])].filter(Boolean)));
+    const candidateSelector = observedSelectors.has(selector) ? selector : selector;
+    const resolvedSelector = await resolveActionSelector(page, candidateSelector, actionType, observation);
+    if (!resolvedSelector) {
+      throw new Error(`Planner selected a selector that could not be resolved safely: ${selector}`);
+    }
+    selector = resolvedSelector;
   }
 
   return {
-    action: /** @type {"click" | "fill" | "complete" | "fail"} */ (actionType),
-    selector: action.selector ?? null,
+    action: /** @type {"click" | "fill" | "select" | "check" | "press" | "wait" | "scroll" | "complete" | "fail"} */ (actionType),
+    selector,
     value: action.value ?? null,
     reason: typeof action.reason === "string" ? action.reason : "No reason provided."
   };
+}
+
+/**
+ * @param {import("playwright").Page} page
+ * @param {string} selector
+ * @param {unknown} actionType
+ * @param {Awaited<ReturnType<typeof observe>>} observation
+ */
+async function resolveActionSelector(page, selector, actionType, observation) {
+  const direct = await uniqueVisibleSelector(page, selector);
+  if (direct) return direct;
+
+  const refined = refinementCandidates(selector, actionType, observation);
+  for (const candidate of refined) {
+    const resolved = await uniqueVisibleSelector(page, candidate);
+    if (resolved) return resolved;
+  }
+
+  return null;
+}
+
+/**
+ * @param {import("playwright").Page} page
+ * @param {string} selector
+ */
+async function uniqueVisibleSelector(page, selector) {
+  try {
+    const locator = page.locator(selector);
+    const count = await locator.count();
+    if (count !== 1) return null;
+    if (!(await locator.first().isVisible().catch(() => false))) return null;
+    return selector;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * @param {string} selector
+ * @param {unknown} actionType
+ * @param {Awaited<ReturnType<typeof observe>>} observation
+ */
+function refinementCandidates(selector, actionType, observation) {
+  const candidates = [];
+  const text = selector.startsWith("text=") ? selector.slice(5).trim() : null;
+  if (text && actionType === "click") {
+    candidates.push(`nav button:has-text("${escapeTextSelector(text)}")`);
+    candidates.push(`header button:has-text("${escapeTextSelector(text)}")`);
+    candidates.push(`button:has-text("${escapeTextSelector(text)}")`);
+    candidates.push(`a:has-text("${escapeTextSelector(text)}")`);
+  }
+
+  for (const element of observation.elements) {
+    if (element.selectors?.includes(selector)) {
+      candidates.push(...element.selectors);
+    }
+  }
+
+  return Array.from(new Set(candidates));
+}
+
+/**
+ * @param {string} text
+ */
+function escapeTextSelector(text) {
+  return text.replaceAll("\\", "\\\\").replaceAll("\"", "\\\"");
 }
 
 /**
@@ -332,6 +565,11 @@ function firstJsonObject(text) {
  */
 function formatAction(action) {
   if (action.action === "fill") return `fill ${action.selector}: ${action.reason}`;
+  if (action.action === "select") return `select ${action.selector}: ${action.reason}`;
+  if (action.action === "check") return `check ${action.selector}: ${action.reason}`;
+  if (action.action === "press") return `press ${action.selector} ${action.value}: ${action.reason}`;
+  if (action.action === "wait") return `wait ${action.value ?? "500"}ms: ${action.reason}`;
+  if (action.action === "scroll") return `scroll ${action.value ?? "down"}: ${action.reason}`;
   if (action.action === "click") return `click ${action.selector}: ${action.reason}`;
   return `${action.action}: ${action.reason}`;
 }
@@ -370,7 +608,7 @@ function agentError(message, actions) {
 
 /**
  * @typedef {Object} AgentAction
- * @property {"click" | "fill" | "complete" | "fail"} action
+ * @property {"click" | "fill" | "select" | "check" | "press" | "wait" | "scroll" | "complete" | "fail"} action
  * @property {string | null} selector
  * @property {string | null} value
  * @property {string} reason
