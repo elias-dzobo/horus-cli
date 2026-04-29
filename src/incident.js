@@ -128,7 +128,7 @@ function buildHypothesis(result, failedNetwork, consoleErrors, ignoredNetwork = 
   }
 
   if (ignoredNetwork.length > 0) {
-    return `Journey failed at "${failedStep}" without app-relevant network failures. ${ignoredNetwork.length} third-party or static asset request(s) failed, but they were treated as non-primary evidence.`;
+    return `Journey failed at "${failedStep}" without app-relevant network failures. ${ignoredNetwork.length} static asset or known-noise request(s) failed, but they were treated as non-primary evidence.`;
   }
 
   return `Journey failed at "${failedStep}" without obvious network or console errors. The expected UI state may not have appeared.`;
