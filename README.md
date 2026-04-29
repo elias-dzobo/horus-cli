@@ -54,6 +54,8 @@ The browser agent currently supports these actions:
 - wait
 - scroll
 
+Horus generates multiple selector candidates for observed elements, including semantic and contextual selectors such as placeholder selectors and `nav button:has-text("Archive")`. The agent should use the most specific safe selector it can, and Horus validates that browser actions resolve to a visible target before acting.
+
 Current v1 limits:
 
 - The agent does not read email inboxes, SMS messages, or external OTP providers.
@@ -131,6 +133,8 @@ Artifacts are written to `artifacts/runs/<run-id>/`:
 `repair-context.json` is the v1 handoff contract for future repair agents. It bundles the journey, step history, browser evidence, repro command, correlation IDs, routing hints, and repair eligibility into one structured file.
 
 `run.json` is the canonical local run manifest. It is the CLI version of the future cloud run object and includes project, environment, journey, artifact, summary, repro, and correlation metadata.
+
+Network evidence is filtered by relevance. Horus prioritizes app and API failures in reports while separating third-party or static asset noise, such as font/CDN failures, from likely root causes.
 
 ## Cloud-Ready Config
 

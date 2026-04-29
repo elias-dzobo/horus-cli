@@ -59,6 +59,10 @@
  * @typedef {Object} NetworkSignal
  * @property {string} url
  * @property {string} method
+ * @property {string=} resource_type
+ * @property {"app" | "third_party" | "asset" | "noise"} category
+ * @property {boolean} app_relevant
+ * @property {boolean} ignored
  * @property {number=} status
  * @property {string=} status_text
  * @property {string=} failure

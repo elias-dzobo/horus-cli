@@ -25,7 +25,6 @@ export async function runJourney(journey, options = {}) {
 
   const browser = await chromium.launch({ headless: !options.headed });
   const context = await browser.newContext({
-    extraHTTPHeaders: correlation.headers,
     recordHar: { path: path.join(artifactsDir, "network.har"), mode: "minimal" }
   });
   const page = await context.newPage();
@@ -40,9 +39,11 @@ export async function runJourney(journey, options = {}) {
 
   page.on("response", (response) => {
     if (response.status() >= 400) {
+      const request = response.request();
       networkSignals.push({
         url: response.url(),
-        method: response.request().method(),
+        method: request.method(),
+        ...classifyNetworkRequest(journey.base_url, request.url(), request.resourceType()),
         status: response.status(),
         status_text: response.statusText(),
         timestamp: new Date().toISOString()
@@ -54,6 +55,7 @@ export async function runJourney(journey, options = {}) {
     networkSignals.push({
       url: request.url(),
       method: request.method(),
+      ...classifyNetworkRequest(journey.base_url, request.url(), request.resourceType()),
       failure: request.failure()?.errorText ?? "request failed",
       timestamp: new Date().toISOString()
     });
@@ -143,6 +145,66 @@ export async function runJourney(journey, options = {}) {
     },
     correlation
   };
+}
+
+/**
+ * @param {string} appBaseUrl
+ * @param {string} requestUrl
+ * @param {string} resourceType
+ */
+function classifyNetworkRequest(appBaseUrl, requestUrl, resourceType) {
+  const appUrl = safeUrl(appBaseUrl);
+  const url = safeUrl(requestUrl);
+  const appRelevant = Boolean(url && appUrl && isAppRelevantUrl(appUrl, url, resourceType));
+  const asset = ["font", "image", "stylesheet", "media"].includes(resourceType);
+  const category = appRelevant ? "app" : asset ? "asset" : isKnownNoiseUrl(url) ? "noise" : "third_party";
+
+  return {
+    resource_type: resourceType,
+    category: /** @type {"app" | "third_party" | "asset" | "noise"} */ (category),
+    app_relevant: appRelevant,
+    ignored: !appRelevant
+  };
+}
+
+/**
+ * @param {URL | null} appUrl
+ * @param {URL | null} url
+ * @param {string} resourceType
+ */
+function isAppRelevantUrl(appUrl, url, resourceType) {
+  if (!url || !appUrl) return false;
+  if (url.origin === appUrl.origin) return true;
+  if (isLocalHost(appUrl.hostname) && isLocalHost(url.hostname) && ["fetch", "xhr", "document", "websocket"].includes(resourceType)) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * @param {string} hostname
+ */
+function isLocalHost(hostname) {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+}
+
+/**
+ * @param {URL | null} url
+ */
+function isKnownNoiseUrl(url) {
+  if (!url) return false;
+  return ["fonts.gstatic.com", "fonts.googleapis.com"].includes(url.hostname);
+}
+
+/**
+ * @param {string} raw
+ */
+function safeUrl(raw) {
+  try {
+    return new URL(raw);
+  } catch {
+    return null;
+  }
 }
 
 /**

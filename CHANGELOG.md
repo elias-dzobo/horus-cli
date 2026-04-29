@@ -16,3 +16,7 @@ Initial local-first CLI release.
 - Add project and environment metadata to local runs.
 - Add `horus doctor`, `horus runs list`, `horus runs show`, and `horus upload`.
 - Expand browser-agent actions beyond click/fill to select, check, press, wait, and scroll.
+- Filter network evidence so app/API failures are prioritized over third-party static asset noise.
+- Stop applying Horus correlation headers globally to third-party requests.
+- Add richer selector candidates and safer selector validation for browser-agent actions.
+- Add goal-satisfaction evaluation so the agent can stop when the requested page/state is already visible.

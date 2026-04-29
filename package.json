@@ -1,6 +1,6 @@
 {
   "name": "@nonfungibledev/horus-cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Journey-based QA runner that captures browser evidence and writes incident reports.",
   "type": "module",
   "license": "MIT",

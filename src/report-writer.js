@@ -80,7 +80,9 @@ function createRunManifest(result, incident) {
     counts: {
       steps: result.steps.length,
       console_errors: incident.browser_signal.console_errors.length,
-      network_failures: incident.browser_signal.network_failures.length
+      app_network_failures: incident.browser_signal.network_failures.length,
+      third_party_network_failures: incident.browser_signal.third_party_network_failures?.length ?? 0,
+      ignored_network_failures: incident.browser_signal.ignored_network_failures?.length ?? 0
     },
     repro: result.repro,
     correlation: result.correlation,
@@ -164,7 +166,9 @@ ${incident.recommended_action}
 - Screenshot: ${incident.browser_signal.screenshot ?? "none"}
 - DOM snapshot: ${incident.browser_signal.dom_snapshot ?? "none"}
 - Console errors: ${incident.browser_signal.console_errors.length}
-- Network failures: ${incident.browser_signal.network_failures.length}
+- App network failures: ${incident.browser_signal.network_failures.length}
+- Third-party network failures: ${incident.browser_signal.third_party_network_failures?.length ?? 0}
+- Ignored network noise: ${incident.browser_signal.ignored_network_failures?.length ?? 0}
 
 ## Step History
 
