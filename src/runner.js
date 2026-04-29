@@ -158,12 +158,13 @@ function classifyNetworkRequest(appBaseUrl, requestUrl, resourceType) {
   const appRelevant = Boolean(url && appUrl && isAppRelevantUrl(appUrl, url, resourceType));
   const asset = ["font", "image", "stylesheet", "media"].includes(resourceType);
   const category = appRelevant ? "app" : asset ? "asset" : isKnownNoiseUrl(url) ? "noise" : "third_party";
+  const ignored = category === "asset" || category === "noise";
 
   return {
     resource_type: resourceType,
     category: /** @type {"app" | "third_party" | "asset" | "noise"} */ (category),
     app_relevant: appRelevant,
-    ignored: !appRelevant
+    ignored
   };
 }
 
