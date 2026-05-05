@@ -183,6 +183,8 @@ If `environment.base_url` is set, it overrides the journey `base_url` at runtime
 
 ## Journey Format
 
+For the full v1 journey authoring guide, including supported step types and examples, see `docs/journey-authoring.md`.
+
 ```yaml
 name: upload_document
 base_url: http://localhost:3000
