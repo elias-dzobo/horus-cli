@@ -21,6 +21,7 @@
   "files": [
     "src",
     "templates",
+    "docs",
     "README.md",
     "CHANGELOG.md",
     "LICENSE",
