@@ -110,6 +110,21 @@ Inspect local run history:
 ```bash
 npx horus runs list
 npx horus runs show <run-id>
+npx horus runs latest --failed
+```
+
+Send a failed run to a repair workflow:
+
+```bash
+npx horus repair-context <run-id>
+npx horus codex <run-id>
+```
+
+Create a GitHub issue from a run, or preview the issue body first:
+
+```bash
+npx horus github issue <run-id> --dry-run
+npx horus github issue <run-id>
 ```
 
 Prepare a run for future cloud upload:
@@ -131,6 +146,12 @@ Artifacts are written to `artifacts/runs/<run-id>/`:
 - `screenshots/`
 
 `repair-context.json` is the v1 handoff contract for future repair agents. It bundles the journey, step history, browser evidence, repro command, correlation IDs, routing hints, and repair eligibility into one structured file.
+
+`horus repair-context <run-id>` prints that JSON context for automation. `horus codex <run-id>` prints a focused repair prompt that points a coding agent at the report, repair context, repro command, and expected validation workflow.
+
+`horus github issue <run-id>` uses the GitHub CLI (`gh`) to open an issue with the incident summary, evidence links, repro command, and repair-agent handoff command. Use `--dry-run` to print the issue body without creating anything.
+
+For CI setup, see `docs/github-actions.md`.
 
 `run.json` is the canonical local run manifest. It is the CLI version of the future cloud run object and includes project, environment, journey, artifact, summary, repro, and correlation metadata.
 
